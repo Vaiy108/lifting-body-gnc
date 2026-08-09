@@ -51,7 +51,7 @@ simulation and GNC stack for that problem from first principles:
 | Steady-glide trim solver + validity-envelope guards | done |
 | Test suite (30 tests: physics invariants, port integrity, symmetry, trim equilibrium) | done |
 | MATLAB cross-validation of the aero data port | done (`matlab/cross_validation_output.txt`) |
-| EKF navigation (15-state) | in progress |
+| ESKF navigation (15-state error-state KF: IMU strapdown + GNSS + baro) | **done** |
 | Gain-scheduled flight control | in progress |
 | TAEM-style energy-managed approach & landing guidance | in progress |
 | Monte Carlo dispersion campaign | planned |
@@ -87,6 +87,28 @@ glider).
 ![Propulsion model verification](docs/demo_propulsion.png)
 
 ---
+
+## Navigation and control
+
+**Navigation** is a 15-state error-state Kalman filter (position,
+velocity, attitude, gyro bias, accel bias) fusing strapdown IMU
+mechanization with GNSS (5 Hz) and barometric altitude (20 Hz)
+updates. First-order (Euler) discretization of the error-state
+transition; documented in `navigation.py`.
+
+**Control** is a PD pitch-attitude-hold loop with body-rate damping,
+commanding the elevator. A notable finding from closed-loop
+verification: the vehicle's trim point at 160 m/s / 8 km altitude is
+**statically unstable in pitch** (dCm/dalpha > 0), consistent with
+lifting-body vehicles that rely on active stability augmentation
+rather than inherent aerodynamic stability. `test_phase2.py` documents
+this explicitly and verifies the controller stabilizes it. Gains were
+tuned by sweep (`scripts/tune_pitch_gains.py`) for a 2 deg attitude step
+with < 2 deg overshoot, < 0.05 deg steady-state error, and no actuator
+saturation.
+
+---
+
 
 ## Aerodynamic data provenance
 
