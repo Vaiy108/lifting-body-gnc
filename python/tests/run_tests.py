@@ -3,11 +3,12 @@
 import sys
 import traceback
 
-import test_phase1 as m
+import test_phase1 as m1
+import test_phase2 as m2
 
 
 def main() -> int:
-    tests = [(n, f) for n, f in vars(m).items()
+    tests = [(n, f) for mod in (m1, m2) for n, f in vars(mod).items()
              if n.startswith("test_") and callable(f)]
     failed = []
     for name, fn in tests:

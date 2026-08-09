@@ -63,6 +63,18 @@ simulation and GNC stack for that problem from first principles:
 
 ---
 
+## Project phases
+
+| Phase | Content | Status |
+|---|---|---|
+| **1** | Plant: aerodynamics, atmosphere, rigid-body dynamics, actuators, sensors, propulsion | done |
+| **2** | ESKF navigation, pitch-attitude-hold control, closed loop on estimated (not true) state | done |
+| **3** | Dependency-free embedded C port of navigation + control, SIL cross-validation vs. Python | in progress |
+| **4** | Processor-in-the-loop on STM32 Nucleo-F401RE | in progress |
+| **5** | Gain-scheduled control, TAEM-style energy-managed glide-path guidance, Monte Carlo dispersion, Simulink plant cross-validation, CAN/MCP2515 PIL upgrade | roadmap -- landing as commits after initial release |
+
+--- 
+
 ## Physical subsystem models
 
 Four physical subsystems are independently modeled, each with stated
@@ -155,9 +167,11 @@ a roadmap item.
 
 ```
 pip install -r requirements.txt
-pytest python/tests -v                        # 24 tests
+pytest python/tests -v                        # 30 tests
 python python/scripts/demo_glide.py           # trimmed-glide demo plot
 python python/scripts/generate_aero_tables.py # lookup tables for the C port
+python python/scripts/demo_propulsion.py      # propulsion plot
+python python/scripts/demo_closed_loop.py     # closed-loop demo plot
 ```
 
 ---
