@@ -52,6 +52,7 @@ simulation and GNC stack for that problem from first principles:
 | Test suite (30 tests: physics invariants, port integrity, symmetry, trim equilibrium) | done |
 | MATLAB cross-validation of the aero data port | done (`matlab/cross_validation_output.txt`) |
 | ESKF navigation (15-state error-state KF: IMU strapdown + GNSS + baro) | **done** |
+| Pitch-attitude-hold flight control (PD, rate-damped) | **done** |
 | Gain-scheduled flight control | in progress |
 | TAEM-style energy-managed approach & landing guidance | in progress |
 | Monte Carlo dispersion campaign | planned |
