@@ -54,6 +54,36 @@ def quat_from_euler(phi: float, theta: float, psi: float) -> np.ndarray:
     ])
 
 
+def quat_mult(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    """Hamilton product q1 (x) q2, scalar-first convention."""
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    return np.array([
+        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+    ])
+
+
+def quat_from_rotvec(phi: np.ndarray) -> np.ndarray:
+    """Quaternion for a small rotation vector [rad] (first-order for
+    small angles; exact for the half-angle formula at any magnitude)."""
+    theta = np.linalg.norm(phi)
+    if theta < 1e-8:
+        return quat_normalize(np.array([1.0, phi[0] / 2, phi[1] / 2, phi[2] / 2]))
+    axis = phi / theta
+    return np.concatenate(([np.cos(theta / 2)], axis * np.sin(theta / 2)))
+
+
+def skew(v: np.ndarray) -> np.ndarray:
+    return np.array([
+        [0.0, -v[2], v[1]],
+        [v[2], 0.0, -v[0]],
+        [-v[1], v[0], 0.0],
+    ])
+
+
 def quat_to_euler(q: np.ndarray) -> tuple[float, float, float]:
     """3-2-1 Euler angles (phi, theta, psi) [rad] from quaternion."""
     w, x, y, z = q
