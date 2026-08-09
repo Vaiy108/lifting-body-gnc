@@ -45,8 +45,35 @@ simulation and GNC stack for that problem from first principles:
 | Quaternion 6-DOF rigid-body dynamics (RK4) | done |
 | Actuator bank (2nd-order servos, limits) + 7-surface control allocation | done |
 | Sensor models (IMU / GNSS / baro / air data) | done |
+| Propulsion model (spool lag, density/Mach thrust lapse, fuel burn) | done |
+
+---
+
+## Physical subsystem models
+
+Four physical subsystems are independently modeled, each with stated
+assumptions and a distinct validation method:
+
+| Subsystem | Model | Key assumptions | Validated by |
+|---|---|---|---|
+| **Aerodynamics** | TM-4302 polynomial coefficients (datum + 6 control-surface effectiveness models + rate damping), transferred from the reference point to the CG | subsonic only; α ∈ [−10°, 30°], β ∈ [−10°, 10°]; control effectiveness linear in deflection | long-hand polynomial re-derivation in tests, lateral-symmetry checks, MATLAB cross-validation against the reference implementation |
+| **Actuators** | 2nd-order servo (ωn = 44 rad/s, ζ = 0.71) with position limits; 7-surface → 6-aero-effect allocation via pseudo-inverse | rate saturation not modeled (roadmap) | step-response convergence, limit clamping, mixer round-trip test |
+| **Sensors** | IMU (bias + noise + optional gyro-bias random walk), GNSS, baro, air data | linear-Gaussian error models; no scale-factor error (roadmap) | statistical recovery of bias/noise over Monte Carlo sample sets |
+| **Propulsion** | 1st-order spool lag, density- and Mach-based thrust lapse, fuel-mass integration, thrust-line offset moment | control-oriented (no compressor/turbine thermodynamics); models the powered demonstrator/ferry configuration, since the HL-20 itself is an unpowered glider | spool time-constant recovery, Mach-lapse monotonicity, fuel-depletion floor, thrust-offset moment sign |
+
+---
 
 
+### Propulsion model
+
+First-order spool-lag thrust response with density- and Mach-based
+thrust lapse, plus fuel-mass integration — modeling the powered
+demonstrator/ferry configuration (the HL-20 itself is an unpowered
+glider).
+
+![Propulsion model verification](docs/demo_propulsion.png)
+
+---
 
 ## Aerodynamic data provenance
 
@@ -55,6 +82,10 @@ All aerodynamic coefficients originate from:
 > Jackson, E. B., and Cruz, C. L., *"Preliminary Subsonic Aerodynamic
 > Model for Simulation Studies of the HL-20 Lifting Body,"*
 > NASA TM-4302, August 1992.
+
+---
+
+
 
 
 
