@@ -50,6 +50,7 @@ simulation and GNC stack for that problem from first principles:
 | Propulsion model (spool lag, density/Mach thrust lapse, fuel burn) | done |
 | Steady-glide trim solver + validity-envelope guards | done |
 | Test suite (30 tests: physics invariants, port integrity, symmetry, trim equilibrium) | done |
+| MATLAB cross-validation of the aero data port | done (`matlab/cross_validation_output.txt`) |
 
 ---
 
@@ -115,6 +116,28 @@ python python/scripts/generate_aero_tables.py # lookup tables for the C port
 ```
 
 ---
+
+## Architecture
+
+```
+lifting-body-gnc/
+├── python/
+│   ├── hlgnc/
+│   │   ├── aero.py          TM-4302 aerodynamic model
+│   │   ├── atmosphere.py    US76 / COESA atmosphere
+│   │   ├── dynamics.py      quaternion 6-DOF EOM, RK4
+│   │   ├── actuators.py     servo bank + control allocation
+│   │   ├── sensors.py       IMU / GNSS / baro / air data
+│   │   ├── propulsion.py    spool lag, thrust lapse, fuel burn
+│   │   └── sim.py           vehicle assembly, trim, sim loop
+│   ├── scripts/             demos and table generation
+│   └── tests/               pytest suite (+ dependency-free runner)
+├── matlab/                  cross-validation vs. reference model
+├── data/hl20_aero/          generated lookup tables (C port source)
+├── c/                       embedded flight software (Phase 3)
+└── docs/
+```
+
 
 
 
