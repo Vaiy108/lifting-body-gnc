@@ -17,6 +17,8 @@ GNC development: **aerodynamics**, **actuators**, **sensors**, and
 **propulsion** — each as an independently created, tested, and (for
 aerodynamics) externally cross-validated mathematical model.
 
+![Open-loop trimmed glide](docs/demo_glide.png)
+
 ---
 
 ## Why this project
@@ -46,6 +48,8 @@ simulation and GNC stack for that problem from first principles:
 | Actuator bank (2nd-order servos, limits) + 7-surface control allocation | done |
 | Sensor models (IMU / GNSS / baro / air data) | done |
 | Propulsion model (spool lag, density/Mach thrust lapse, fuel burn) | done |
+| Steady-glide trim solver + validity-envelope guards | done |
+| Test suite (30 tests: physics invariants, port integrity, symmetry, trim equilibrium) | done |
 
 ---
 
@@ -82,6 +86,33 @@ All aerodynamic coefficients originate from:
 > Jackson, E. B., and Cruz, C. L., *"Preliminary Subsonic Aerodynamic
 > Model for Simulation Studies of the HL-20 Lifting Body,"*
 > NASA TM-4302, August 1992.
+
+The published polynomial fits (datum coefficients, six control-surface
+effectiveness models, dynamic damping derivatives) are implemented in
+`python/hlgnc/aero.py`. `matlab/cross_validate_hl20.m` verifies the
+port bit-for-bit against the reference MATLAB/Simulink implementation
+of the same database (Aerospace Blockset HL-20 example — MathWorks
+example code is **not** redistributed here; only the public-domain NASA
+coefficient data is used).
+
+**Model validity envelope** (inherited from TM-4302 and enforced in
+code): α ∈ [−10°, +30°], β ∈ [−10°, +10°], subsonic only
+(compressibility neglected), control effectiveness linear in
+deflection. The simulation scenario is therefore terminal-area flight:
+subsonic glide, approach and landing. Mach-dependent table
+infrastructure is in place for the published higher-Mach HL-20 data as
+a roadmap item.
+
+---
+
+## Quick start (Windows / Anaconda or any Python ≥ 3.10)
+
+```
+pip install -r requirements.txt
+pytest python/tests -v                        # 24 tests
+python python/scripts/demo_glide.py           # trimmed-glide demo plot
+python python/scripts/generate_aero_tables.py # lookup tables for the C port
+```
 
 ---
 
