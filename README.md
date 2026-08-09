@@ -41,6 +41,7 @@ simulation and GNC stack for that problem from first principles:
 | Module | Status |
 |---|---|
 | US Standard Atmosphere 1976 (0–86 km) | done |
+| HL-20 aero model (TM-4302 polynomials, full control set, rate damping, CG transfer) | done |
 
 
 ## Aerodynamic data provenance
