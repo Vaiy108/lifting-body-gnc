@@ -34,8 +34,13 @@ simulation and GNC stack for that problem from first principles:
    cross-validated against the Python reference,
 4. processor-in-the-loop execution on an STM32 target.
 
+---
 
+## Current status
 
+| Module | Status |
+|---|---|
+| US Standard Atmosphere 1976 (0–86 km) | done |
 
 
 ## Aerodynamic data provenance
@@ -46,27 +51,6 @@ All aerodynamic coefficients originate from:
 > Model for Simulation Studies of the HL-20 Lifting Body,"*
 > NASA TM-4302, August 1992.
 
-
-## Proposed Architecture and Repo Structure
-
-```
-lifting-body-gnc/
-├── python/
-│   ├── hlgnc/
-│   │   ├── aero.py          TM-4302 aerodynamic model
-│   │   ├── atmosphere.py    US76 / COESA atmosphere
-│   │   ├── dynamics.py      quaternion 6-DOF EOM, RK4
-│   │   ├── actuators.py     servo bank + control allocation
-│   │   ├── sensors.py       IMU / GNSS / baro / air data
-│   │   ├── propulsion.py    spool lag, thrust lapse, fuel burn
-│   │   └── sim.py           vehicle assembly, trim, sim loop
-│   ├── scripts/             demos and table generation
-│   └── tests/               pytest suite (+ dependency-free runner)
-├── matlab/                  cross-validation vs. reference model
-├── data/hl20_aero/          generated lookup tables (C port source)
-├── c/                       embedded flight software (Phase 3)
-└── docs/
-```
 
 
 ## 👤 Author
