@@ -108,6 +108,20 @@ tuned by sweep (`scripts/tune_pitch_gains.py`) for a 2 deg attitude step
 with < 2 deg overshoot, < 0.05 deg steady-state error, and no actuator
 saturation.
 
+The `scripts/demo_closed_loop.py` demo is the integration test that
+matters: the controller runs on the **ESKF's estimated** attitude and
+rate, not the simulator's true state -- proving the navigation and
+control layers compose correctly, which is the actual flight-software
+architecture.
+
+![Closed-loop demo](docs/demo_closed_loop.png)
+
+
+This table is deliberate: it mirrors a common GNC job-ad requirement —
+create mathematical models for aerodynamics, sensors, actuators, and
+propulsion — with each subsystem backed by an explicit assumption set
+and a named test, not just an implementation.
+
 ---
 
 
