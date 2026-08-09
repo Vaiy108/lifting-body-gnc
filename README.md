@@ -167,7 +167,7 @@ a roadmap item.
 
 ```
 pip install -r requirements.txt
-pytest python/tests -v                        # 30 tests
+pytest python/tests -v                        # 40 tests
 python python/scripts/demo_glide.py           # trimmed-glide demo plot
 python python/scripts/generate_aero_tables.py # lookup tables for the C port
 python python/scripts/demo_propulsion.py      # propulsion plot
