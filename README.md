@@ -51,6 +51,14 @@ simulation and GNC stack for that problem from first principles:
 | Steady-glide trim solver + validity-envelope guards | done |
 | Test suite (30 tests: physics invariants, port integrity, symmetry, trim equilibrium) | done |
 | MATLAB cross-validation of the aero data port | done (`matlab/cross_validation_output.txt`) |
+| EKF navigation (15-state) | in progress |
+| Gain-scheduled flight control | in progress |
+| TAEM-style energy-managed approach & landing guidance | in progress |
+| Monte Carlo dispersion campaign | planned |
+| Embedded C flight software + SIL cross-validation | planned |
+| Processor-in-the-loop on STM32 (UART, then CAN via MCP2515) | planned |
+| Supersonic/hypersonic aero extension (Mach-dependent tables) | planned |
+| Simulink plant model (Aerospace Blockset, shared CSV tables) + trajectory-level cross-validation | planned |
 
 ---
 
@@ -139,7 +147,24 @@ lifting-body-gnc/
 ```
 
 
+---
 
+## Verification approach
+
+Every layer is tested against an independent reference:
+
+- **Atmosphere** vs. published US76 table values (tropopause, 20 km).
+- **Aero data port** vs. long-hand re-computation in the tests *and*
+  vs. the reference MATLAB implementation (`matlab/`).
+- **Physics invariants**: quaternion norm preservation over 2000 RK4
+  steps, ballistic free-fall against closed-form kinematics, DCM
+  orthonormality, lateral-symmetry properties required by TM-4302.
+- **Trim** verified as a true equilibrium by simulation: a trimmed
+  state flown open-loop holds airspeed within 5 % and α within 1.5°.
+- Trim solutions outside actuator authority or the aero validity
+  envelope are rejected, not returned.
+
+  ---
 
 
 
