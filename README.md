@@ -53,11 +53,12 @@ simulation and GNC stack for that problem from first principles:
 | MATLAB cross-validation of the aero data port | done (`matlab/cross_validation_output.txt`) |
 | ESKF navigation (15-state error-state KF: IMU strapdown + GNSS + baro) | **done** |
 | Pitch-attitude-hold flight control (PD, rate-damped) | **done** |
-| Gain-scheduled flight control | in progress |
-| TAEM-style energy-managed approach & landing guidance | in progress |
+| Closed-loop demo: ESKF estimates (not truth) driving the controller | **done** |
+| Processor-in-the-loop on STM32 (UART, then CAN via MCP2515) | in progress |
+| Gain-scheduled flight control | planned |
+| TAEM-style energy-managed approach & landing guidance | planned |
 | Monte Carlo dispersion campaign | planned |
 | Embedded C flight software + SIL cross-validation | planned |
-| Processor-in-the-loop on STM32 (UART, then CAN via MCP2515) | planned |
 | Supersonic/hypersonic aero extension (Mach-dependent tables) | planned |
 | Simulink plant model (Aerospace Blockset, shared CSV tables) + trajectory-level cross-validation | planned |
 
@@ -69,9 +70,9 @@ simulation and GNC stack for that problem from first principles:
 |---|---|---|
 | **1** | Plant: aerodynamics, atmosphere, rigid-body dynamics, actuators, sensors, propulsion | done |
 | **2** | ESKF navigation, pitch-attitude-hold control, closed loop on estimated (not true) state | done |
-| **3** | Dependency-free embedded C port of navigation + control, SIL cross-validation vs. Python | in progress |
+| **3** | Dependency-free embedded C port of navigation + control, SIL cross-validation vs. Python | done |
 | **4** | Processor-in-the-loop on STM32 Nucleo-F401RE | in progress |
-| **5** | Gain-scheduled control, TAEM-style energy-managed glide-path guidance, Monte Carlo dispersion, Simulink plant cross-validation, CAN/MCP2515 PIL upgrade | roadmap -- landing as commits after initial release |
+| **5** | Gain-scheduled control, TAEM-style energy-managed glide-path guidance, Monte Carlo dispersion, Simulink plant cross-validation, CAN/MCP2515 PIL upgrade | planned roadmap -- landing as commits after initial release |
 
 --- 
 
@@ -136,6 +137,58 @@ and a named test, not just an implementation.
 
 ---
 
+## Embedded C port and SIL cross-validation
+
+The navigation (ESKF) and control (pitch-attitude-hold) modules are
+ported to **dependency-free C** (`c/`): no dynamic allocation, no
+external libraries beyond `<math.h>`, fixed-size buffers throughout —
+the same constraints used in the radar and telemetry portfolio
+projects, and the constraints a real flight-software target requires.
+
+**Cross-validation method:** `python/scripts/generate_c_test_vectors.py`
+drives the Python reference implementation through representative
+scenarios (IMU strapdown propagation, GNSS/baro updates, and a sweep
+of controller inputs including saturation cases) and records every
+input alongside the Python-computed output to CSV. `c/test/test_main.c`
+replays the identical inputs through the C implementation and reports
+the max absolute error against those recorded outputs — this is
+software-in-the-loop (SIL) validation: proving the C port is
+numerically equivalent to the verified Python model before any
+hardware is involved.
+
+**Result:** agreement at double-precision machine-epsilon level
+(~1e-15 to 1e-19) across 500 navigation-predict steps, 300
+predict+update steps, and 204 controller cases including four explicit
+saturation scenarios — see `c/sil_cross_validation_output.txt` for the
+full run.
+
+```
+$ cd c && make test
+  eskf_predict  rows=500  max|dpos|=6.939e-18 m  max|dq|=2.168e-19  max|dPdiag|=3.553e-15
+  eskf_update   rows=300  max|dpos|=8.327e-17 m  max|dPdiag|=1.110e-16
+  control       rows=204  max|de_err|=0.000e+00 deg
+ALL SIL CROSS-VALIDATION TESTS PASSED
+```
+
+One defect this process caught: the initial C `ESKF` struct declared
+its covariance matrix `P` at exactly the 15x15 size needed, while every
+matrix routine operating on it used a 16-wide stride (the fixed buffer
+size shared with all other matrix operations) — a one-row stack buffer
+overflow, invisible without a strict build. AddressSanitizer
+(`gcc -fsanitize=address`) caught it immediately; the fix was declaring
+`P` at the same 16x16 stride as everything else operating on it. Worth
+knowing in an interview: the position/velocity/quaternion states
+already agreed with Python to ~1e-17 *before* this fix, since the
+overflow only corrupted the extra row past the matrix's logical bounds
+— a reminder that "the numbers look right" isn't the same as
+"the memory is safe."
+
+Next: processor-in-the-loop (PIL) execution of this same C code on an
+STM32 Nucleo-F401RE, first over UART (lockstep, then real-time with
+cycle-accurate timing via the DWT cycle counter), then CAN via
+MCP2515 — Phase 4.
+
+---
 
 ## Aerodynamic data provenance
 
@@ -222,9 +275,29 @@ lifting-body-gnc/
 ├── matlab/                  cross-validation vs. reference model
 ├── data/hl20_aero/          generated lookup tables (C port source)
 ├── c/                       embedded flight software (Phase 3)
+│   ├── include/              headers: quat_math, matlib, eskf, control
+│   ├── src/                  implementations (dependency-free, no malloc)
+│   ├── test/test_main.c      SIL cross-validation harness
+│   ├── test_vectors/         Python-generated reference I/O (CSV)
+│   └── Makefile
 └── docs/
 ```
 
+
+---
+
+## What is implemented in this Project
+
+| GNC Requirements | Module | Evidence |
+|---|---|---|
+| Nonlinear 6-DOF flight dynamic models | `dynamics.py` | quaternion EOM, RK4; invariant tests |
+| Mathematical models of physical subsystems — **aerodynamics** | `aero.py` | TM-4302 port; MATLAB cross-validation |
+| ...— **sensors** | `sensors.py` | IMU/GNSS/baro/air-data error models |
+| ...— **actuators** | `actuators.py` | 2nd-order servo + allocation |
+| ...— **propulsion** | `propulsion.py` | spool lag + density/Mach lapse + fuel burn |
+| Trajectory simulation / mission analysis | `sim.py`, `demo_glide.py` | trimmed-glide trajectory demo |
+| Software-in-the-loop testing | `matlab/cross_validate_hl20.m` | data-port cross-validation |
+| Hardware-in-the-loop / flight control hardware | *(planned)* | STM32 PIL, see status table |
 
 ---
 
