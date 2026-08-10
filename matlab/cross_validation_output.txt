@@ -1,0 +1,10 @@
+cross_validate_hl20
+Datum coefficient port errors (max abs):
+  CX: 0.000e+00
+  CZ: 0.000e+00
+  Cm: 0.000e+00
+Expected < 1e-12. Larger values indicate a port defect.
+
+Grid size: 41 alpha points x 21 beta points
+Spot check CZ at alpha=-5.0, beta=0.0: ref=0.295879, python=0.295879
+diary off

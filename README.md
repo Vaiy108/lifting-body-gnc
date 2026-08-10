@@ -168,10 +168,10 @@ a roadmap item.
 ```
 pip install -r requirements.txt
 pytest python/tests -v                        # 40 tests
-python python/scripts/demo_glide.py           # trimmed-glide demo plot
-python python/scripts/generate_aero_tables.py # lookup tables for the C port
-python python/scripts/demo_propulsion.py      # propulsion plot
-python python/scripts/demo_closed_loop.py     # closed-loop demo plot
+python python/scripts/demo_glide.py            # open-loop trimmed-glide demo plot
+python python/scripts/demo_closed_loop.py       # ESKF + pitch-hold closed-loop demo plot
+python python/scripts/generate_aero_tables.py  # lookup tables for the C port
+python python/scripts/demo_propulsion.py       # propulsion plot
 ```
 
 ---
@@ -188,6 +188,8 @@ lifting-body-gnc/
 │   │   ├── actuators.py     servo bank + control allocation
 │   │   ├── sensors.py       IMU / GNSS / baro / air data
 │   │   ├── propulsion.py    spool lag, thrust lapse, fuel burn
+│   │   ├── navigation.py    15-state ESKF (IMU + GNSS + baro)
+│   │   ├── control.py       pitch-attitude-hold flight control
 │   │   └── sim.py           vehicle assembly, trim, sim loop
 │   ├── scripts/             demos and table generation
 │   └── tests/               pytest suite (+ dependency-free runner)
