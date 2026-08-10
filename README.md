@@ -292,9 +292,9 @@ lifting-body-gnc/
 |---|---|---|
 | Nonlinear 6-DOF flight dynamic models | `dynamics.py` | quaternion EOM, RK4; invariant tests |
 | Mathematical models of physical subsystems — **aerodynamics** | `aero.py` | TM-4302 port; MATLAB cross-validation |
-| ...— **sensors** | `sensors.py` | IMU/GNSS/baro/air-data error models |
-| ...— **actuators** | `actuators.py` | 2nd-order servo + allocation |
-| ...— **propulsion** | `propulsion.py` | spool lag + density/Mach lapse + fuel burn |
+|  **sensors** | `sensors.py` | IMU/GNSS/baro/air-data error models |
+|  **actuators** | `actuators.py` | 2nd-order servo + allocation |
+| **propulsion** | `propulsion.py` | spool lag + density/Mach lapse + fuel burn |
 | Trajectory simulation / mission analysis | `sim.py`, `demo_glide.py` | trimmed-glide trajectory demo |
 | Software-in-the-loop testing | `matlab/cross_validate_hl20.m` | data-port cross-validation |
 | Hardware-in-the-loop / flight control hardware | *(planned)* | STM32 PIL, see status table |
