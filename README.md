@@ -176,6 +176,32 @@ python python/scripts/demo_propulsion.py       # propulsion plot
 
 ---
 
+### C implementation (Phase 3: SIL cross-validation)
+
+Requires a Linux environment (native, dual-boot, or WSL2) with `gcc`
+and `make`: 
+```
+sudo apt update
+sudo apt install build-essential -y
+cd ""Path to /c""
+make test
+```
+Expected output: 
+```
+ALL SIL CROSS-VALIDATION TESTS PASSED`, with max errors against the Python reference at
+double-precision machine-epsilon level (~1e-15 to 1e-19). 
+Full saved output: `c/sil_cross_validation_output.txt`.
+```
+To generate test vectors:
+```
+cd "file path to /python"
+python scripts/generate_c_test_vectors.py
+```
+
+
+---
+
+
 ## Architecture
 
 ```
