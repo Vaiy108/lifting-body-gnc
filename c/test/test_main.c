@@ -19,6 +19,7 @@
 #include "eskf.h"
 #include "control.h"
 #include "quat_math.h"
+#include "pil_protocol.h"
 
 #define MAX_LINE 4096
 
@@ -194,6 +195,30 @@ static int test_control(const char *path) {
     return ok ? 0 : 1;
 }
 
+/* ------------------------------------------------------------ protocol */
+
+static int test_protocol_checksum(void) {
+    PilInputPacket in;
+    memset(&in, 0, sizeof(in));
+    in.magic = PIL_INPUT_MAGIC;
+    in.seq = 42;
+    in.f_meas[0] = 1.0; in.f_meas[2] = -9.80665;
+    in.dt = 0.005;
+    in.theta_cmd = 0.1;
+    pil_input_set_checksum(&in);
+
+    int ok1 = pil_input_verify(&in);
+    /* corrupt one payload byte -> checksum must now fail */
+    unsigned char *raw = (unsigned char *)&in;
+    raw[20] ^= 0xFF;
+    int ok2 = pil_input_verify(&in);
+
+    int ok = ok1 && !ok2;
+    printf("  protocol      valid=%d (want 1)  corrupted=%d (want 0)\n", ok1, ok2);
+    printf("%s  test_protocol_checksum\n", ok ? "PASS" : "FAIL");
+    return ok ? 0 : 1;
+}
+
 int main(int argc, char **argv) {
     const char *vecdir = (argc > 1) ? argv[1] : "test_vectors";
     char path[512];
@@ -210,6 +235,8 @@ int main(int argc, char **argv) {
 
     snprintf(path, sizeof(path), "%s/control_vectors.csv", vecdir);
     failures += test_control(path);
+
+    failures += test_protocol_checksum();
 
     printf("=============================================================\n");
     if (failures == 0) {

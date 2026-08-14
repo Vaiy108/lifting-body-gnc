@@ -1,0 +1,30 @@
+#include "pil_protocol.h"
+
+uint8_t pil_checksum(const void *data, size_t len) {
+    const uint8_t *b = (const uint8_t *)data;
+    uint8_t sum = 0;
+    for (size_t i = 0; i < len; i++) sum = (uint8_t)(sum + b[i]);
+    return sum;
+}
+
+void pil_input_set_checksum(PilInputPacket *pkt) {
+    size_t n = sizeof(*pkt) - sizeof(pkt->checksum);
+    pkt->checksum = pil_checksum(pkt, n);
+}
+
+void pil_output_set_checksum(PilOutputPacket *pkt) {
+    size_t n = sizeof(*pkt) - sizeof(pkt->checksum);
+    pkt->checksum = pil_checksum(pkt, n);
+}
+
+int pil_input_verify(const PilInputPacket *pkt) {
+    size_t n = sizeof(*pkt) - sizeof(pkt->checksum);
+    return pkt->magic == PIL_INPUT_MAGIC &&
+          pil_checksum(pkt, n) == pkt->checksum;
+}
+
+int pil_output_verify(const PilOutputPacket *pkt) {
+    size_t n = sizeof(*pkt) - sizeof(pkt->checksum);
+    return pkt->magic == PIL_OUTPUT_MAGIC &&
+          pil_checksum(pkt, n) == pkt->checksum;
+}
