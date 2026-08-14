@@ -49,12 +49,13 @@ simulation and GNC stack for that problem from first principles:
 | Sensor models (IMU / GNSS / baro / air data) | done |
 | Propulsion model (spool lag, density/Mach thrust lapse, fuel burn) | done |
 | Steady-glide trim solver + validity-envelope guards | done |
-| Test suite (30 tests: physics invariants, port integrity, symmetry, trim equilibrium) | done |
+| Test suite (40 tests total: Phase 1 plant + Phase 2 nav/control, physics invariants, port integrity, symmetry, trim equilibrium, closed-loop stabilization) | done |
 | MATLAB cross-validation of the aero data port | done (`matlab/cross_validation_output.txt`) |
 | ESKF navigation (15-state error-state KF: IMU strapdown + GNSS + baro) | **done** |
 | Pitch-attitude-hold flight control (PD, rate-damped) | **done** |
 | Closed-loop demo: ESKF estimates (not truth) driving the controller | **done** |
-| Processor-in-the-loop on STM32 (UART, then CAN via MCP2515) | in progress |
+| Embedded C flight software (nav + control) + SIL cross-validation | **done** |
+| Processor-in-the-loop on STM32 F401RE (UART, then CAN via MCP2515) | in progress — protocol + host-simulated PIL done, hardware flash next |
 | Gain-scheduled flight control | planned |
 | TAEM-style energy-managed approach & landing guidance | planned |
 | Monte Carlo dispersion campaign | planned |
@@ -73,6 +74,13 @@ simulation and GNC stack for that problem from first principles:
 | **3** | Dependency-free embedded C port of navigation + control, SIL cross-validation vs. Python | done |
 | **4** | Processor-in-the-loop on STM32 Nucleo-F401RE | in progress |
 | **5** | Gain-scheduled control, TAEM-style energy-managed glide-path guidance, Monte Carlo dispersion, Simulink plant cross-validation, CAN/MCP2515 PIL upgrade | planned roadmap -- landing as commits after initial release |
+
+Note on scope: the Phase 2 pitch-attitude-hold controller is a
+single-axis, single-gain-set inner loop, intentionally minimal so it
+could be verified, ported to C, and run on hardware quickly. It is the
+actuator interface the Phase 5 outer-loop glide-path guidance will
+command; gain scheduling and the full glide-to-landing guidance law are
+scoped for future work.
 
 --- 
 
@@ -130,8 +138,7 @@ architecture.
 ![Closed-loop demo](docs/demo_closed_loop.png)
 
 
-This table is deliberate: it mirrors a common GNC job-ad requirement —
-create mathematical models for aerodynamics, sensors, actuators, and
+This table is deliberate: Create mathematical models for aerodynamics, sensors, actuators, and
 propulsion — with each subsystem backed by an explicit assumption set
 and a named test, not just an implementation.
 
@@ -183,12 +190,80 @@ overflow only corrupted the extra row past the matrix's logical bounds
 — a reminder that "the numbers look right" isn't the same as
 "the memory is safe."
 
-Next: processor-in-the-loop (PIL) execution of this same C code on an
-STM32 Nucleo-F401RE, first over UART (lockstep, then real-time with
-cycle-accurate timing via the DWT cycle counter), then CAN via
-MCP2515 — Phase 4.
 
 ---
+
+## Processor-in-the-loop (Phase 4)
+
+**Status: protocol and host-simulated PIL verified; hardware flash to
+the Nucleo-F401RE is the remaining step.**
+
+Before touching hardware, the same stack-usage audit that caught the
+covariance bug in Phase 3 was run again: `eskf_predict()` +
+`eskf_update_gnss()` together required **~37 KB of stack** (measured
+with `gcc -fstack-usage`) — more than a typical STM32F401RE stack
+budget out of a 96 KB total SRAM. The fix: the large N_ERR-scale
+scratch matrices inside `eskf.c` are now `static` rather than
+stack-allocated, cutting the worst-case call chain to **~1.3 KB**.
+This trades reentrancy for a two-order-of-magnitude stack reduction —
+an accepted tradeoff for a single-threaded, single-instance flight
+loop. Re-verified against the Phase 3 test vectors afterward: bit-for-
+bit identical output, confirming the change affected only storage
+duration, not behavior.
+
+**Wire protocol** (`c/include/pil_protocol.h`): packed, checksummed
+binary structs — `PilInputPacket` (IMU + optional GNSS/baro + attitude
+command) and `PilOutputPacket` (estimated nav state + elevator
+command + cycle-timing). A single-byte additive checksum is used
+rather than a CRC, appropriate for a benign point-to-point UART link
+rather than a noisy or adversarial channel — documented as a roadmap
+item if this were ever hardened further.
+
+**Platform-independent core** (`c/pil/pil_core.c`): the *only* logic
+shared between the host simulation and the eventual STM32 firmware.
+`pil_core_step()` wraps the existing (Phase 3-verified)
+`eskf_predict`/`eskf_update_*`/`pitch_hold_command` calls behind the
+wire protocol — everything platform-specific (UART driver calls, DWT
+cycle counting) stays outside this file, so validating it on Linux
+validates the exact logic that later runs on the target.
+
+**Host-simulated PIL** (`c/pil/host_sim_main.c` +
+`python/scripts/pil_driver.py`): a native Linux executable plays the
+role of the STM32 firmware, reading/writing the same packet structs
+over stdin/stdout. The Python driver runs the identical 30 s
+trimmed-glide closed-loop scenario as Phase 2's `demo_closed_loop.py`,
+but delegates every navigation+control step to the external process
+over a real byte stream instead of calling the Python module directly.
+
+```
+$ cd c && make all
+$ cd ../python && python3 scripts/pil_driver.py --backend hostsim
+Backend: hostsim
+NAK'd (checksum-failed) steps: 0
+Round-trip time: mean=25.7 us, p99=62.7 us, max=1995.3 us
+Final theta: true=0.213 deg, est=0.619 deg, target=0.643 deg
+Final nav position error: [...] m (|.|=1.76 m)
+```
+
+Result: matches the pure-Python Phase 2 closed-loop demo to 3-4
+significant figures — confirming the encode/decode, subprocess IPC,
+and C GNC logic reproduce the verified Python reference exactly. The
+checksum/NAK path was also verified directly: a deliberately corrupted
+packet byte is detected and rejected (`cycle_count = 0xFFFFFFFF`
+sentinel) rather than silently accepted or crashing the process.
+
+![PIL host-simulation demo](docs/demo_pil_hostsim.png)
+
+**Same driver, same protocol, real hardware next:** `pil_driver.py
+--backend serial --port /dev/ttyACM0` runs the identical scenario
+against a flashed Nucleo-F401RE with no code changes — only the
+transport (UART instead of a subprocess pipe) differs. The remaining
+Phase 4 work is the STM32-side firmware (`c/stm32/`, CubeMX project +
+`pil_core.c` wired to UART interrupt/DMA and the DWT cycle counter)
+and physical bring-up.
+
+---
+
 
 ## Aerodynamic data provenance
 
@@ -251,6 +326,23 @@ cd "file path to /python"
 python scripts/generate_c_test_vectors.py
 ```
 
+### Processor-in-the-loop, host-simulated (Phase 4a)
+
+```
+cd c
+make all                                        # builds test_main and host_sim
+cd ../python
+python scripts/pil_driver.py --backend hostsim  # full 30 s closed-loop demo
+```
+
+Once a Nucleo-F401RE is flashed with the Phase 4b firmware (`c/stm32/`,
+in progress), the identical scenario runs against real hardware with
+one flag change:
+
+```
+python scripts/pil_driver.py --backend serial --port /dev/ttyACM0
+```
+
 
 ---
 
@@ -274,10 +366,12 @@ lifting-body-gnc/
 │   └── tests/               pytest suite (+ dependency-free runner)
 ├── matlab/                  cross-validation vs. reference model
 ├── data/hl20_aero/          generated lookup tables (C port source)
-├── c/                       embedded flight software (Phase 3)
-│   ├── include/              headers: quat_math, matlib, eskf, control
+├── c/                       embedded flight software (Phase 3-4)
+│   ├── include/              headers: quat_math, matlib, eskf, control, pil_protocol
 │   ├── src/                  implementations (dependency-free, no malloc)
-│   ├── test/test_main.c      SIL cross-validation harness
+│   ├── pil/                  pil_core.c (platform-independent step fn),
+│   │                          host_sim_main.c (Linux stand-in for the STM32 loop)
+│   ├── test/test_main.c      SIL cross-validation + protocol harness
 │   ├── test_vectors/         Python-generated reference I/O (CSV)
 │   └── Makefile
 └── docs/
