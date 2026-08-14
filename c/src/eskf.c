@@ -1,4 +1,19 @@
-/* eskf.c -- see eskf.h and python/hlgnc/navigation.py for derivation. */
+/* eskf.c -- see eskf.h and python/hlgnc/navigation.py for derivation.
+ *
+ * Embedded stack-budget note: the large N_ERR-scale (15x15/16x16)
+ * scratch matrices inside eskf_predict() and joseph_update() are
+ * declared `static` rather than on the stack. With stack-allocated
+ * temporaries, eskf_predict() alone required ~17 KB of stack and the
+ * predict+update call chain required ~37 KB which is more than the default stack budget on an
+ * STM32F401RE (96 KB total SRAM shared across stack, heap, and all
+ * static data). Moving these temporaries to static storage (.bss)
+ * eliminates that risk entirely, at the cost of eskf_predict() and
+ * the update functions no longer being reentrant or thread-safe. This
+ * is an accepted tradeoff for a single-threaded, single-instance
+ * flight-control loop (the target architecture here); it would need
+ * revisiting if multiple ESKF instances or a multi-threaded/RTOS
+ * context were ever required.
+ */
 #include "eskf.h"
 #include "quat_math.h"
 #include <string.h>
@@ -70,7 +85,7 @@ void eskf_predict(ESKF *kf, const double f_meas[3], const double w_meas[3],
     memcpy(st->q, q_new, 4 * sizeof(double));
 
     /* -- error-state transition matrix F = I + Fc*dt (first order) -- */
-    double F[MATLIB_MAXN][MATLIB_MAXN];
+    static double F[MATLIB_MAXN][MATLIB_MAXN];
     mat_eye(&F[0][0], N_ERR, S);
     for (int i = 0; i < 3; i++) F[i][3 + i] = dt;   /* dp/dv */
 
@@ -92,7 +107,7 @@ void eskf_predict(ESKF *kf, const double f_meas[3], const double w_meas[3],
     for (int i = 0; i < 3; i++) F[6 + i][9 + i] = -dt; /* dtheta/dbg */
 
     /* -- process noise: Qd = G Qc G^T * dt, G maps [n_v,n_theta,n_bg,n_ba] -- */
-    double G[MATLIB_MAXN][MATLIB_MAXN];
+    static double G[MATLIB_MAXN][MATLIB_MAXN];
     mat_zero(&G[0][0], N_ERR, 12, S);
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
@@ -108,23 +123,23 @@ void eskf_predict(ESKF *kf, const double f_meas[3], const double w_meas[3],
     for (int i = 9; i < 12; i++) Qc[i] = kf->noise.accel_bias_walk_std * kf->noise.accel_bias_walk_std;
 
     /* GQc (15x12): scale columns of G by Qc */
-    double GQc[MATLIB_MAXN][MATLIB_MAXN];
+    static double GQc[MATLIB_MAXN][MATLIB_MAXN];
     for (int i = 0; i < N_ERR; i++)
         for (int j = 0; j < 12; j++)
             GQc[i][j] = G[i][j] * Qc[j];
 
-    double Gt[MATLIB_MAXN][MATLIB_MAXN];
+    static double Gt[MATLIB_MAXN][MATLIB_MAXN];
     mat_transpose(&G[0][0], N_ERR, 12, S, &Gt[0][0], S);
 
-    double Qd[MATLIB_MAXN][MATLIB_MAXN];
+    static double Qd[MATLIB_MAXN][MATLIB_MAXN];
     mat_mult(&GQc[0][0], N_ERR, 12, S, &Gt[0][0], 12, N_ERR, S, &Qd[0][0], S);
     for (int i = 0; i < N_ERR; i++)
         for (int j = 0; j < N_ERR; j++)
             Qd[i][j] *= dt;
 
     /* P = F P F^T + Qd */
-    double FP[MATLIB_MAXN][MATLIB_MAXN], Ft[MATLIB_MAXN][MATLIB_MAXN];
-    double FPFt[MATLIB_MAXN][MATLIB_MAXN];
+    static double FP[MATLIB_MAXN][MATLIB_MAXN], Ft[MATLIB_MAXN][MATLIB_MAXN];
+    static double FPFt[MATLIB_MAXN][MATLIB_MAXN];
     mat_mult(&F[0][0], N_ERR, N_ERR, S, &kf->P[0][0], N_ERR, N_ERR, S, &FP[0][0], S);
     mat_transpose(&F[0][0], N_ERR, N_ERR, S, &Ft[0][0], S);
     mat_mult(&FP[0][0], N_ERR, N_ERR, S, &Ft[0][0], N_ERR, N_ERR, S, &FPFt[0][0], S);
@@ -135,23 +150,23 @@ void eskf_predict(ESKF *kf, const double f_meas[3], const double w_meas[3],
 static int joseph_update(ESKF *kf, double H[MATLIB_MAXN][MATLIB_MAXN], int m,
                          double R[MATLIB_MAXN][MATLIB_MAXN],
                          const double *innov) {
-    double HP[MATLIB_MAXN][MATLIB_MAXN], Ht[MATLIB_MAXN][MATLIB_MAXN];
+    static double HP[MATLIB_MAXN][MATLIB_MAXN], Ht[MATLIB_MAXN][MATLIB_MAXN];
     mat_mult(&H[0][0], m, N_ERR, S, &kf->P[0][0], N_ERR, N_ERR, S, &HP[0][0], S);
     mat_transpose(&H[0][0], m, N_ERR, S, &Ht[0][0], S);
 
-    double Sm[MATLIB_MAXN][MATLIB_MAXN];
+    static double Sm[MATLIB_MAXN][MATLIB_MAXN];
     mat_mult(&HP[0][0], m, N_ERR, S, &Ht[0][0], N_ERR, m, S, &Sm[0][0], S);
     mat_add(&Sm[0][0], &R[0][0], &Sm[0][0], m, m, S, S, S);
 
-    double PHt[MATLIB_MAXN][MATLIB_MAXN];
+    static double PHt[MATLIB_MAXN][MATLIB_MAXN];
     mat_mult(&kf->P[0][0], N_ERR, N_ERR, S, &Ht[0][0], N_ERR, m, S, &PHt[0][0], S);
 
-    double B[MATLIB_MAXN][MATLIB_MAXN]; /* B = PHt^T (m x 15), becomes K^T after solve */
+    static double B[MATLIB_MAXN][MATLIB_MAXN]; /* B = PHt^T (m x 15), becomes K^T after solve */
     mat_transpose(&PHt[0][0], N_ERR, m, S, &B[0][0], S);
 
     if (mat_solve(Sm, m, B, N_ERR) != 0) return -1;
 
-    double K[MATLIB_MAXN][MATLIB_MAXN]; /* K = B^T (15 x m) */
+    static double K[MATLIB_MAXN][MATLIB_MAXN]; /* K = B^T (15 x m) */
     mat_transpose(&B[0][0], m, N_ERR, S, &K[0][0], S);
 
     double dx[N_ERR];
@@ -161,23 +176,23 @@ static int joseph_update(ESKF *kf, double H[MATLIB_MAXN][MATLIB_MAXN], int m,
         dx[i] = s;
     }
 
-    double KH[MATLIB_MAXN][MATLIB_MAXN], IKH[MATLIB_MAXN][MATLIB_MAXN];
+    static double KH[MATLIB_MAXN][MATLIB_MAXN], IKH[MATLIB_MAXN][MATLIB_MAXN];
     mat_mult(&K[0][0], N_ERR, m, S, &H[0][0], m, N_ERR, S, &KH[0][0], S);
-    double I15[MATLIB_MAXN][MATLIB_MAXN];
+    static double I15[MATLIB_MAXN][MATLIB_MAXN];
     mat_eye(&I15[0][0], N_ERR, S);
     mat_sub(&I15[0][0], &KH[0][0], &IKH[0][0], N_ERR, N_ERR, S, S, S);
 
-    double IKHt[MATLIB_MAXN][MATLIB_MAXN], tmp1[MATLIB_MAXN][MATLIB_MAXN], term1[MATLIB_MAXN][MATLIB_MAXN];
+    static double IKHt[MATLIB_MAXN][MATLIB_MAXN], tmp1[MATLIB_MAXN][MATLIB_MAXN], term1[MATLIB_MAXN][MATLIB_MAXN];
     mat_transpose(&IKH[0][0], N_ERR, N_ERR, S, &IKHt[0][0], S);
     mat_mult(&IKH[0][0], N_ERR, N_ERR, S, &kf->P[0][0], N_ERR, N_ERR, S, &tmp1[0][0], S);
     mat_mult(&tmp1[0][0], N_ERR, N_ERR, S, &IKHt[0][0], N_ERR, N_ERR, S, &term1[0][0], S);
 
-    double KR[MATLIB_MAXN][MATLIB_MAXN], Kt[MATLIB_MAXN][MATLIB_MAXN], term2[MATLIB_MAXN][MATLIB_MAXN];
+    static double KR[MATLIB_MAXN][MATLIB_MAXN], Kt[MATLIB_MAXN][MATLIB_MAXN], term2[MATLIB_MAXN][MATLIB_MAXN];
     mat_mult(&K[0][0], N_ERR, m, S, &R[0][0], m, m, S, &KR[0][0], S);
     mat_transpose(&K[0][0], N_ERR, m, S, &Kt[0][0], S);
     mat_mult(&KR[0][0], N_ERR, m, S, &Kt[0][0], m, N_ERR, S, &term2[0][0], S);
 
-    double P_new[MATLIB_MAXN][MATLIB_MAXN];
+    static double P_new[MATLIB_MAXN][MATLIB_MAXN];
     mat_add(&term1[0][0], &term2[0][0], &P_new[0][0], N_ERR, N_ERR, S, S, S);
 
     /* inject and reset */
@@ -202,12 +217,12 @@ static int joseph_update(ESKF *kf, double H[MATLIB_MAXN][MATLIB_MAXN], int m,
 int eskf_update_gnss(ESKF *kf, const double pos_meas[3],
                      const double vel_meas[3], const double pos_std[3],
                      double vel_std) {
-    double H[MATLIB_MAXN][MATLIB_MAXN];
+    static double H[MATLIB_MAXN][MATLIB_MAXN];
     mat_zero(&H[0][0], 6, N_ERR, S);
     for (int i = 0; i < 3; i++) H[i][i] = 1.0;
     for (int i = 0; i < 3; i++) H[3 + i][3 + i] = 1.0;
 
-    double R[MATLIB_MAXN][MATLIB_MAXN];
+    static double R[MATLIB_MAXN][MATLIB_MAXN];
     mat_zero(&R[0][0], 6, 6, S);
     for (int i = 0; i < 3; i++) R[i][i] = pos_std[i] * pos_std[i];
     for (int i = 0; i < 3; i++) R[3 + i][3 + i] = vel_std * vel_std;
@@ -220,11 +235,11 @@ int eskf_update_gnss(ESKF *kf, const double pos_meas[3],
 }
 
 int eskf_update_baro(ESKF *kf, double alt_meas, double alt_std) {
-    double H[MATLIB_MAXN][MATLIB_MAXN];
+    static double H[MATLIB_MAXN][MATLIB_MAXN];
     mat_zero(&H[0][0], 1, N_ERR, S);
     H[0][2] = -1.0;
 
-    double R[MATLIB_MAXN][MATLIB_MAXN];
+    static double R[MATLIB_MAXN][MATLIB_MAXN];
     mat_zero(&R[0][0], 1, 1, S);
     R[0][0] = alt_std * alt_std;
 
