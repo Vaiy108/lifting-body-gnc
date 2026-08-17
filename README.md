@@ -72,8 +72,8 @@ simulation and GNC stack for that problem from first principles:
 | **1** | Plant: aerodynamics, atmosphere, rigid-body dynamics, actuators, sensors, propulsion | done |
 | **2** | ESKF navigation, pitch-attitude-hold control, closed loop on estimated (not true) state | done |
 | **3** | Dependency-free embedded C port of navigation + control, SIL cross-validation vs. Python | done |
-| **4** | Processor-in-the-loop on STM32 Nucleo-F401RE | in progress |
-| **5** | Gain-scheduled control, TAEM-style energy-managed glide-path guidance, Monte Carlo dispersion, Simulink plant cross-validation, CAN/MCP2515 PIL upgrade | planned roadmap -- landing as commits after initial release |
+| **4** | Processor-in-the-loop on STM32 Nucleo-F401RE | done |
+| **5** | Gain-scheduled control, TAEM-style energy-managed glide-path guidance, Monte Carlo dispersion, Simulink plant cross-validation, CAN/MCP2515 PIL upgrade | planned roadmap -- after initial release |
 
 Note on scope: the Phase 2 pitch-attitude-hold controller is a
 single-axis, single-gain-set inner loop, intentionally minimal so it
@@ -257,10 +257,20 @@ sentinel) rather than silently accepted or crashing the process.
 **Same driver, same protocol, real hardware next:** `pil_driver.py
 --backend serial --port /dev/ttyACM0` runs the identical scenario
 against a flashed Nucleo-F401RE with no code changes — only the
-transport (UART instead of a subprocess pipe) differs. The remaining
-Phase 4 work is the STM32-side firmware (`c/stm32/`, CubeMX project +
-`pil_core.c` wired to UART interrupt/DMA and the DWT cycle counter)
-and physical bring-up.
+transport (UART instead of a subprocess pipe) differs.
+
+**Hardware implementation:** the STM32 firmware (CubeMX project,
+UART/DWT integration), physical PIL bring-up, and full closed-loop
+verification on real Cortex-M4F hardware live in a companion repo,
+[**lifting-body-flight-software**](https://github.com/Vaiy108/lifting-body-flight-software).
+It vendors the verified C files from this repo (`c/`, unmodified,
+provenance-tagged) and adds everything hardware-specific — including
+a real bring-up finding: a Cortex-M4F unaligned-double hard fault,
+found and fixed during flashing, documented in that repo's README.
+Kept as a separate repo deliberately — this repo covers the modeling
+and simulation work, that one covers the embedded-systems and
+hardware implementation, each reviewable as a focused, standalone
+artifact.
 
 ---
 
